@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MarineOps - AI for marine plastic management</title>
+    <link rel="icon" type="image/png" href="static/logo.png"/>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="static/css/style.css"/>
+  </head>
+  <body>
+    <!-- Floating particles -->
+    <div class="particles" id="particles"></div>
+
+    <div class="wrapper">
+      <!-- ── Header ── -->
+      <header>
+        <div class="logo">
+          <div class="logo-icon">
+            <img src="static/assets/logo.png" alt="MarineOps Logo" />
+          </div>
+          <div>
+            <div class="logo-text">MarineOps</div>
+            <div class="logo-sub">AI for marine plastic management</div>
+          </div>
+        </div>
+        <nav class="nav-links">
+          <button class="nav-link active" onclick="showPage('detect')">
+            Detect
+          </button>
+          <button class="nav-link" onclick="showPage('history')">
+            History
+          </button>
+          <button class="nav-link" onclick="showPage('dashboard')">
+            Dashboard
+          </button>
+        </nav>
+      </header>
+
+      <!-- ══════════════════════════════════════════
+       PAGE: DETECT
+  ══════════════════════════════════════════════ -->
+      <div class="page active" id="page-detect">
+        <div class="section-title">New Scan</div>
+        <div class="section-heading">Upload & Analyse</div>
+
+        <div class="upload-grid">
+          <!-- Left: drop zone -->
+          <div class="card" style="padding: 24px">
+            <div class="drop-zone" id="drop-zone">
+              <input type="file" id="file-input" accept="image/*" />
+              <div class="drop-icon">📷</div>
+              <div class="drop-text">
+                <span>Choose an image</span> or drag it here<br />
+                <small style="font-size: 12px"
+                  >JPG, PNG — max 20MB, min 320×320px</small
+                >
+              </div>
+            </div>
+            <div id="preview-container">
+              <img id="preview-img" src="" alt="Preview" />
+            </div>
+          </div>
+
+          <!-- Right: form -->
+          <div class="card" style="padding: 24px">
+            <div class="form-group">
+              <label>Location Name</label>
+              <input
+                type="text"
+                id="location-input"
+                placeholder="e.g. Choisy Beach, Grand Baie..."
+              />
+            </div>
+
+            <div class="form-group">
+              <label>Confidence Threshold</label>
+              <input
+                type="text"
+                id="conf-input"
+                placeholder="0.25 (default)"
+                value="0.25"
+              />
+            </div>
+
+            <div
+              style="
+                margin-top: 8px;
+                padding: 14px;
+                background: rgba(0, 212, 255, 0.05);
+                border-radius: 8px;
+                border: 1px solid var(--glass-border);
+                font-size: 13px;
+                color: var(--text-muted);
+                line-height: 1.6;
+              "
+            >
+              Images are validated for size and format before detection.
+              Confidence is calibrated using isotonic regression for accurate
+              PSI scoring.
+            </div>
+
+            <button
+              class="btn btn-primary"
+              id="detect-btn"
+              onclick="runDetect()"
+            >
+              <span id="detect-btn-text">🔍 Run Detection</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results-panel">
+          <div class="card" style="margin-top: 0">
+            <!-- Stats row -->
+            <div class="results-grid">
+              <div class="stat-card">
+                <div class="stat-value" id="res-psi">—</div>
+                <div class="stat-label">Image PSI</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="res-location-psi">—</div>
+                <div class="stat-label">Location PSI</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-value" id="res-objects">—</div>
+                <div class="stat-label">Objects Found</div>
+              </div>
+            </div>
+
+            <!-- Severity + location -->
+            <div
+              style="
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                margin-bottom: 24px;
+                flex-wrap: wrap;
+              "
+            >
+              <div>
+                <span
+                  style="
+                    font-size: 13px;
+                    color: var(--text-muted);
+                    margin-right: 8px;
+                  "
+                  >Severity:</span
+                >
+                <span class="severity-badge" id="res-severity">—</span>
+              </div>
+              <div>
+                <span
+                  style="
+                    font-size: 13px;
+                    color: var(--text-muted);
+                    margin-right: 8px;
+                  "
+                  >Location:</span
+                >
+                <span
+                  id="res-location"
+                  style="
+                    font-family: &quot;Space Mono&quot;, monospace;
+                    font-size: 13px;
+                    color: var(--text-primary);
+                  "
+                  >—</span
+                >
+              </div>
+              <div>
+                <span
+                  style="
+                    font-size: 13px;
+                    color: var(--text-muted);
+                    margin-right: 8px;
+                  "
+                  >Images at location:</span
+                >
+                <span
+                  id="res-img-count"
+                  style="
+                    font-family: &quot;Space Mono&quot;, monospace;
+                    font-size: 13px;
+                    color: var(--accent-cyan);
+                  "
+                  >—</span
+                >
+              </div>
+            </div>
+
+            <!-- Class breakdown -->
+            <div class="class-breakdown" id="class-breakdown-section">
+              <div class="detections-title">Class Breakdown</div>
+              <div id="class-bars"></div>
+            </div>
+
+            <!-- Detection list -->
+            <div style="margin-top: 24px">
+              <div class="detections-title">All Detections</div>
+              <div class="detection-list" id="detection-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════════════
+     PAGE: HISTORY
+══════════════════════════════════════════════ -->
+      <div class="page" id="page-history">
+        <div class="section-title">Records</div>
+        <div class="section-heading">Detection History</div>
+
+        <!-- Filters -->
+        <div class="card" style="margin-bottom: 16px">
+          <div class="history-filters">
+            <input
+              type="text"
+              id="location-filter"
+              placeholder="Filter by location..."
+              oninput="onFilterInput()"
+            />
+            <a
+              class="btn btn-outline"
+              href="http://localhost:8000/report/csv"
+              target="_blank"
+              >⬇ CSV</a
+            >
+            <a
+              class="btn btn-outline"
+              href="http://localhost:8000/report/pdf"
+              target="_blank"
+              >⬇ PDF</a
+            >
+          </div>
+        </div>
+
+        <!-- ── CONTAINER 1: Photo History ── -->
+        <div class="card" style="margin-bottom: 24px">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 14px;
+            "
+          >
+            <div>
+              <div class="card-label">Per Image</div>
+              <div class="card-title">Photo Upload History</div>
+            </div>
+            <span
+              id="photo-count"
+              style="
+                font-family: &quot;Space Mono&quot;, monospace;
+                font-size: 12px;
+                color: var(--text-muted);
+              "
+              >— records</span
+            >
+          </div>
+
+          <div class="history-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Location</th>
+                  <th>Image PSI</th>
+                  <th>Objects</th>
+                  <th>Timestamp</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody id="photo-tbody">
+                <tr>
+                  <td
+                    colspan="5"
+                    style="
+                      text-align: center;
+                      color: var(--text-muted);
+                      padding: 40px;
+                    "
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- ── CONTAINER 2: Location History ── -->
+        <div class="card">
+          <div
+            style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 14px;
+            "
+          >
+            <div>
+              <div class="card-label">Aggregated</div>
+              <div class="card-title">Location History</div>
+            </div>
+            <span
+              id="location-count"
+              style="
+                font-family: &quot;Space Mono&quot;, monospace;
+                font-size: 12px;
+                color: var(--text-muted);
+              "
+              >— locations</span
+            >
+          </div>
+
+          <div class="history-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Location</th>
+                  <th>Location PSI</th>
+                  <th>Total Objects</th>
+                  <th>Severity</th>
+                  <th>Total Scans</th>
+                </tr>
+              </thead>
+              <tbody id="location-tbody">
+                <tr>
+                  <td
+                    colspan="5"
+                    style="
+                      text-align: center;
+                      color: var(--text-muted);
+                      padding: 40px;
+                    "
+                  >
+                    Loading...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <!-- ══════════════════════════════════════════
+       PAGE: DASHBOARD
+  ══════════════════════════════════════════════ -->
+      <div class="page" id="page-dashboard">
+        <div class="section-title">Analytics</div>
+        <div class="section-heading">Live Dashboard</div>
+
+        <div class="dash-placeholder" id="dash-placeholder">
+          <span style="font-size: 32px">📊</span>
+          <span>Plotly Dash Dashboard</span>
+          <span style="font-size: 12px; color: var(--text-muted)"
+            >Connecting to http://localhost:8000/dashboard</span
+          >
+          <button
+            class="btn btn-outline"
+            style="margin-top: 8px"
+            onclick="loadDash()"
+          >
+            Load Dashboard
+          </button>
+        </div>
+        <iframe
+          class="dash-frame"
+          id="dash-frame"
+          src=""
+          style="display: none"
+        ></iframe>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast"></div>
+
+   <script src="/static/scripts/app.js"></script>
+  </body>
+</html>
