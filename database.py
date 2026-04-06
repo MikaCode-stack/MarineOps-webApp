@@ -7,6 +7,7 @@ import os
 
 load_dotenv()
 
+#Connection parameters
 DATABASE_URL = (
     f"postgresql://{os.getenv('DB_USER')}:"
     f"{os.getenv('DB_PASSWORD')}@"
@@ -19,6 +20,7 @@ engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
+#detection table model
 class Detection(Base):
     __tablename__ = "detections"
     id = Column(Integer, primary_key=True, index=True)
@@ -31,6 +33,7 @@ class Detection(Base):
     image_path = Column(String)
     timestamp = Column(DateTime, default=datetime.utcnow)
 
+#location_summary table model
 class LocationSummary(Base):
     __tablename__ = "location_summary"
     id = Column(Integer, primary_key=True, index=True)
@@ -41,6 +44,8 @@ class LocationSummary(Base):
 
 Base.metadata.create_all(bind=engine)
 
+
+#Connecting to PostGreSql
 def get_db():
     db = SessionLocal()
     try:
