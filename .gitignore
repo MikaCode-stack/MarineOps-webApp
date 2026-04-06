@@ -1,4 +1,4 @@
-/.env
-/.uploads
-/.venv
-/.__pycache__
+.env
+uploads/
+.venv
+__pycache__
