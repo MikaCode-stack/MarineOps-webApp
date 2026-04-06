@@ -27,6 +27,30 @@ EMPTY_DF = pd.DataFrame(columns=[
     'total_objects', 'class_counts', 'image_path', 'timestamp'
 ])
 
+BASE_LAYOUT = dict(
+    paper_bgcolor='#051e38',
+    plot_bgcolor='#020c18',
+    font=dict(color='#e8f4f8', family='DM Sans', size=11),
+    colorway=['#00d4ff', '#00ff9d', '#ffb347', '#ff4f6b', '#7b61ff'],
+    margin=dict(l=40, r=40, t=40, b=120),
+    autosize=True,
+    xaxis=dict(gridcolor='rgba(255,255,255,0.05)'),
+    yaxis=dict(gridcolor='rgba(255,255,255,0.05)'),
+    legend=dict(
+        orientation='h',
+        yanchor='top',
+        y=-0.25,
+        xanchor='center',
+        x=0.5,
+        font=dict(size=10),
+        bgcolor='rgba(5,30,56,0.7)',
+        bordercolor='rgba(0,212,255,0.2)',
+        borderwidth=1,
+        itemwidth=30,
+        tracegroupgap=4,
+    ),
+)
+
 def load_data():
     try:
         with engine.connect() as conn:
@@ -62,18 +86,6 @@ THEME = {
     'colorway':      ['#00d4ff', '#00ff9d', '#ffb347', '#ff4f6b', '#7b61ff']
 }
 
-def apply_theme(fig):
-    fig.update_layout(
-        paper_bgcolor=THEME['paper_bgcolor'],
-        plot_bgcolor=THEME['plot_bgcolor'],
-        font=THEME['font'],
-        colorway=THEME['colorway'],
-        margin=dict(l=20, r=20, t=40, b=20),
-        legend=dict(bgcolor='rgba(0,0,0,0)'),
-        xaxis=dict(gridcolor='rgba(255,255,255,0.05)'),
-        yaxis=dict(gridcolor='rgba(255,255,255,0.05)')
-    )
-    return fig
 
 # ── Dash app ─────────────────────────────────────────────
 app_dash = dash.Dash(
@@ -85,7 +97,8 @@ app_dash.layout = html.Div(
     style={
         'backgroundColor': '#020c18',
         'minHeight': '100vh',
-        'padding': '24px',
+        'padding': '20px',
+        'overflowY': 'auto',
         'fontFamily': 'DM Sans, sans-serif'
     },
     children=[
@@ -119,18 +132,17 @@ app_dash.layout = html.Div(
 
         # Charts row 1
         html.Div([
-            html.Div(dcc.Graph(id='psi-bar'),   style={'flex': '1'}),
-            html.Div(dcc.Graph(id='class-pie'), style={'flex': '1'}),
+            html.Div(dcc.Graph(id='psi-bar',    style={'height': '380px'}), style={'flex': '1', 'minWidth': '0'}),
+            html.Div(dcc.Graph(id='class-pie',  style={'height': '380px'}), style={'flex': '1', 'minWidth': '0'}),
         ], style={'display': 'flex', 'gap': '16px', 'marginBottom': '16px'}),
-
         # Charts row 2
         html.Div([
-            html.Div(dcc.Graph(id='psi-timeline'),   style={'flex': '2'}),
-            html.Div(dcc.Graph(id='severity-chart'), style={'flex': '1'}),
-        ], style={'display': 'flex', 'gap': '16px'}),
+            html.Div(dcc.Graph(id='psi-timeline',   style={'height': '320px'}), style={'flex': '2', 'minWidth': '0'}),
+            html.Div(dcc.Graph(id='severity-chart', style={'height': '320px'}), style={'flex': '1', 'minWidth': '0'}),
+        ], style={'display': 'flex', 'gap': '16px', 'marginBottom': '16px'}),
     ]
 )
-# ── Callbacks ────────────────────────────────────────────
+# Callbacks
 
 # Callback 1: Summary stats only
 @app_dash.callback(
@@ -201,7 +213,7 @@ def update_charts(_):
         title='Average PSI Score by Location',
         labels={'psi_score': 'PSI Score', 'location': 'Location'}
     )
-    apply_theme(psi_fig)
+    psi_fig.update_layout(**BASE_LAYOUT)
 
     # Class pie
     all_counts = {}
@@ -213,15 +225,26 @@ def update_charts(_):
         except:
             continue
 
-    pie_fig = px.pie(
+    pie_fig = go.Figure(go.Pie(
         values=list(all_counts.values()),
-        names=[n.replace('_', ' ') for n in all_counts.keys()],
-        title='Plastic Type Distribution',
-        hole=0.4
-    ) if all_counts else empty_fig('No class data')
+        labels=[n.replace('_', ' ') for n in all_counts.keys()],
+        title='Plastic Types Distribution',
+        hole=0.4,
+        textposition='inside',
+        textinfo='label+percent',
+        insidetextorientation='radial',
+        marker=dict(
+            colors=['#00d4ff','#00ff9d','#ffb347','#ff4f6b',
+                    '#7b61ff','#fd79a8','#74b9ff','#55efc4','#fdcb6e'],
+            line=dict(color='#020c18', width=1.5)
+        ),
+        showlegend=False,             # ← keys hidden, info is inside slices
+    )) if all_counts else empty_fig('No class data')
     if all_counts:
-        apply_theme(pie_fig)
+            pie_fig.update_layout(**BASE_LAYOUT)
+            pie_fig.update_layout(margin=dict(l=20, r=20, t=40, b=20))
 
+            
     # Timeline
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     timeline_fig = px.line(
@@ -230,9 +253,28 @@ def update_charts(_):
         color='location',
         title='PSI Score Over Time',
         markers=True,
-        labels={'psi_score': 'PSI Score', 'timestamp': 'Time'}
+        labels={'psi_score': 'PSI Score', 'timestamp': ''}
     )
-    apply_theme(timeline_fig)
+    timeline_fig.update_layout(**BASE_LAYOUT)
+    timeline_fig.update_layout(
+    legend=dict(
+        title=dict(text='Location', font=dict(size=10)),  
+        orientation='h',
+        yanchor='top',
+        y=-0.18,             
+        xanchor='center',
+        x=0.5,
+        font=dict(size=10),
+        bgcolor='rgba(5,30,56,0.7)',
+        bordercolor='rgba(0,212,255,0.2)',
+        borderwidth=1,
+    ),
+    margin=dict(l=40, r=40, t=40, b=100), 
+    xaxis=dict(
+        gridcolor='rgba(255,255,255,0.05)',
+        title=''      
+        )   
+    )
 
     # Severity
     severity_fig = px.histogram(
@@ -244,8 +286,21 @@ def update_charts(_):
             'Low': '#00ff9d', 'Moderate': '#ffb347',
             'High': '#ff4f6b', 'Critical': '#ff0000'
         },
-        title='Severity Distribution'
+        title='Severity Distribution',
+        labels={'severity': 'Severity', 'count': 'Count'}
+        )
+    severity_fig.update_layout(**BASE_LAYOUT)
+    severity_fig.update_layout(
+        showlegend=False,            # ← x-axis already shows the labels, legend is duplicate
+        margin=dict(l=40, r=20, t=40, b=40),  # ← tighter bottom, no legend space needed
+        xaxis=dict(
+            title='',                # ← x-axis label is self-explanatory, remove clutter
+            gridcolor='rgba(255,255,255,0.05)'
+        ),
+        yaxis=dict(
+            title='Count',
+            gridcolor='rgba(255,255,255,0.05)'
+        )
     )
-    apply_theme(severity_fig)
 
     return psi_fig, pie_fig, timeline_fig, severity_fig
