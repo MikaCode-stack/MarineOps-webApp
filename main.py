@@ -1,8 +1,14 @@
 # main.py
+# MarineOps Backend API
+#
+# This file implements the core backend logic for:
+# - Image validation
+# - Object detection (YOLO)
+# - Confidence calibration
+# - PSI (Plastic Severity Index) computation
+# - Database storage and analytics
 
-# ============================================================
 # IMPORTS
-# ============================================================
 from fastapi import FastAPI, UploadFile, File, Form, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -31,11 +37,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from fastapi.templating import Jinja2Templates
 
-
-
-# ============================================================
 # SETUP
-# ============================================================
+
 load_dotenv()
 
 app = FastAPI(title="Marine Debris Detection API")
@@ -52,11 +55,15 @@ app.add_middleware(
 # Load model and calibrator once at startup
 model = YOLO('best.pt')
 
+# Confidence calibration model (optional)
+# Improves reliability of predicted confidence scores
+# If unavailable, system falls back to raw confidence
 calibrator = None
 if os.path.exists('calibrator.pkl'):
     with open('calibrator.pkl', 'rb') as f:
         calibrator = pickle.load(f)
 
+# Class-specific weights for PSI computation
 PSI_WEIGHTS = {
     'fishing_net': 2.0, 'buoy': 2.0, 'other_fishing_gear': 2.0,
     'pet_bottle': 1.5, 'other_bottle': 1.5, 'box_shaped_case': 1.5,
@@ -65,30 +72,30 @@ PSI_WEIGHTS = {
 
 os.makedirs('uploads', exist_ok=True)
 
-# ============================================================
+
 # DATABASE
-# ============================================================
+
 from database import get_db, Detection, LocationSummary
 
-# ============================================================
+
 # HELPERS
-# ============================================================
 def get_severity_label(psi):
     if psi < 0.5: return "Low"
     elif psi < 1.5: return "Moderate"
     elif psi < 3.0: return "High"
     else: return "Critical"
 
+#Applying Isotonic regression ito model confidence scores
 def calibrate_confidence(conf):
     if calibrator:
         return float(calibrator.predict([conf])[0])
     return conf
 
-# ============================================================
-# ENDPOINTS
-# ============================================================
 
-# --- Validate ---
+# ENDPOINTS
+
+
+# Validate: Ensures uploaded image meets system requirements (improves robustness and avoids runtime errors by preventing invalid inputs)
 @app.post("/validate")
 async def validate_image(file: UploadFile = File(...)):
     contents = await file.read()
@@ -119,7 +126,17 @@ async def validate_image(file: UploadFile = File(...)):
         "size_mb": round(size_mb, 2)
     }
 
-# --- Detect ---
+# Detect
+    """
+    Core pipeline:
+    1. Save uploaded image
+    2. Run YOLO detection
+    3. Calibrate confidence scores
+    4. Compute PSI per object
+    5. Aggregate PSI per image
+    6. Store results in database
+    7. Update location-level statistics
+    """
 @app.post("/detect")
 async def detect(
     file: UploadFile = File(...),
@@ -202,13 +219,13 @@ async def detect(
     ).first()
     
     if summary:
-        summary.location_psi = aggregate_psi
+        summary.avg_psi = aggregate_psi
         summary.total_scans = n_images
         summary.last_updated = datetime.utcnow()
     else:
         summary = LocationSummary(
             location=location,
-            location_psi=aggregate_psi,
+            avg_psi=aggregate_psi,
             total_scans=1,
             last_updated=datetime.utcnow()
         )
@@ -228,9 +245,20 @@ async def detect(
         'detections': detections
     }
 
-# --- Calibrate ---
+# Calibrate
 @app.post("/calibrate")
 async def calibrate():
+    """
+    Train isotonic regression model for confidence calibration.
+
+    Uses validation predictions to map:
+    raw confidence → calibrated probability
+
+    Evaluated using Brier score:
+    - lower = better calibration
+
+    This improves reliability of downstream PSI scoring.
+    """
     global calibrator
 
     val_images = glob.glob(
@@ -274,13 +302,13 @@ async def calibrate():
         "brier_score": round(brier, 4)
     }
 
-# --- Analytics ---
+# Analytics
 @app.get("/analytics")
 def get_analytics(
     location: str = None,
     db: Session = Depends(get_db)
 ):
-    # ── Base filter applied to ALL queries ──
+    # Base filter applied to ALL queries
     def apply_filter(q):
         if location:
             return q.filter(Detection.location.ilike(f"%{location}%"))
@@ -359,7 +387,7 @@ def get_analytics(
             for t in psi_trend
         ]
     }
-# --- Report CSV ---
+# Report CSV
 @app.get("/report/csv")
 def export_csv(
     location: str = None,
@@ -392,7 +420,7 @@ def export_csv(
         }
     )
 
-# --- Report PDF ---
+# Report PDF
 @app.get("/report/pdf")
 def export_pdf(
     location: str = None,
@@ -440,15 +468,14 @@ def export_pdf(
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ============================================================
+
 # MOUNT DASH
-# ============================================================
+# Mount Dash application inside FastAPI
+# Combines:
+# - backend API (FastAPI)
+# - interactive frontend (Dash)
 from dashboard import app_dash
 app.mount('/dashboard', WSGIMiddleware(app_dash.server))
-
-
-
-
 
 @app.get("/")
 async def root():
