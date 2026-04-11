@@ -262,7 +262,7 @@ async def calibrate():
     global calibrator
 
     val_images = glob.glob(
-        'C:/Users/micha/OneDrive - Middlesex University/UG Project/Software/dataset/BePLi_dataset_v2/plastic_coco/images/val'
+        'C:/Users/Micha/OneDrive - Middlesex University/UG Project/Claude/bepli_yolo_v1/images/val'
     )
 
     if not val_images:
